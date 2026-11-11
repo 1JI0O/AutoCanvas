@@ -64,7 +64,9 @@ async function saveAttendance(enabled: boolean) {
     await attendance.refetch();
     ElMessage.success(
       enabled
-        ? "自动签到已启用，只处理直播最新画面"
+        ? attendanceScope.value.length
+          ? "自动签到已启用，不受全局自动化暂停影响"
+          : "自动签到开关已开启，但未选择课程，不会提交签到"
         : "自动签到已关闭，已发出的请求仍可能完成",
     );
   } catch (error) {
@@ -138,15 +140,19 @@ async function copy(text: string) {
   <section class="panel" style="margin-bottom: 24px">
     <div class="workspace-toolbar">
       <div>
-        <h2>直播自动签到</h2>
-        <p class="muted">只使用最新直播画面；回放二维码不参与自动签到。</p>
+        <h2>直播自动扫码签到</h2>
+        <p class="muted">
+          本页控制向学校提交签到；仅识别、留证与邮件通知请在“签到提醒”配置。
+        </p>
       </div>
       <el-switch
         aria-label="启用直播自动签到"
         :model-value="!!attendance.data.value?.config?.enabled"
         :loading="savingAttendance"
         :disabled="!attendance.data.value"
-        @change="(value: string | number | boolean) => saveAttendance(Boolean(value))"
+        @change="
+          (value: string | number | boolean) => saveAttendance(Boolean(value))
+        "
         active-text="已启用"
         inactive-text="已关闭"
       />
@@ -156,8 +162,8 @@ async function copy(text: string) {
         v-model="attendanceScope"
         multiple
         clearable
-        placeholder="全部已启用课程"
-        aria-label="自动签到课程范围"
+        placeholder="请选择允许自动提交签到的课程"
+        aria-label="允许自动提交签到的课程"
         style="min-width: 300px"
       >
         <el-option
@@ -178,7 +184,7 @@ async function copy(text: string) {
     </div>
     <p class="muted">
       每 0.5 秒取帧，旧帧直接替换。认证完成后重选最新解码结果；本地超过 2
-      秒的结果不发送。直播源本身的延迟不包含在此时间内。
+      秒的结果不发送。直播源本身的延迟不包含在此时间内。课程范围留空时不自动签到。
     </p>
     <el-alert
       v-if="attendance.isError.value"
@@ -188,8 +194,8 @@ async function copy(text: string) {
     />
     <el-alert
       v-if="attendance.data.value?.automation_paused"
-      title="全局自动化已暂停，直播自动签到同步暂停"
-      type="warning"
+      title="媒体与同步自动化已暂停；自动扫码签到由本页开关独立控制，暂停签到请关闭本页开关。"
+      type="info"
       :closable="false"
     />
     <el-alert

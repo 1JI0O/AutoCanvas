@@ -22,6 +22,8 @@ class LiveAttendance:
         return self.store.get('control', 'attendance', {'enabled': False, 'course_ids': []})
 
     def configure(self, body):
+        if set(body) == {'enabled'}:
+            body = {**self.config(), **body}
         if set(body) != {'enabled', 'course_ids'} or type(body['enabled']) is not bool:
             raise ValueError('需要 enabled 和 course_ids')
         if not isinstance(body['course_ids'], list) or any(not isinstance(c, str) or not c.isdigit() for c in body['course_ids']):
@@ -33,15 +35,20 @@ class LiveAttendance:
 
     def enabled(self, course):
         config = self.config()
-        return (config['enabled'] and (not config['course_ids'] or course in config['course_ids'])
-                and self.store.get('courses', course, {}).get('active', False)
-                and not self.store.get('control', 'automation', {}).get('paused', False))
+        return (config['enabled'] and course in config['course_ids']
+                and self.store.get('courses', course, {}).get('active', False))
+
+    def courses(self):
+        config = self.config()
+        return {c['id'] for c in self.store.list('courses')
+                if config['enabled'] and c['id'] in config['course_ids'] and c.get('active', False)}
 
     def status(self):
         return {'config': self.config(), 'auth_status': self.worker.auth_status,
                 'views': list(self.views.values()), 'error': self.last_error,
                 'records': sorted(self.store.list('attendance'), key=lambda r:r['at'], reverse=True)[:300],
                 'sample_seconds': .5, 'max_local_age_seconds': 2,
+                'enabled_course_ids': sorted(self.courses()), 'global_pause_affects_signing': False,
                 'automation_paused': self.store.get('control', 'automation', {}).get('paused', False)}
 
     def watching(self, course):
@@ -145,7 +152,7 @@ class LiveAttendance:
                 if dispatcher.done():
                     await dispatcher
                 now = time.time()
-                if self.config()['enabled'] and now-warmed_at > 60 and (warm is None or warm.done()):
+                if self.courses() and now-warmed_at > 60 and (warm is None or warm.done()):
                     warmed_at = now
                     warm = asyncio.create_task(prepare())
                 wanted = {}

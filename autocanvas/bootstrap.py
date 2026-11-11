@@ -45,7 +45,8 @@ def build(settings):
     canvas = Canvas(auth.session)
     store = Store(settings.root/'state.sqlite3')
     catalog = CatalogSync(canvas, lambda course: Video(auth.video(course)), store, settings.course_ids)
-    assignments = AssignmentSync(canvas, auth.session, store, settings.root/'assignments')
+    assignments = AssignmentSync(canvas, auth.session, store, settings.root/'assignments',
+                                 download_attachments=lambda: settings.download_assignment_attachments)
     inference = Inference(ProcessRecognizer(settings.model, settings.device, dtype=settings.asr_dtype, backend=settings.asr_backend).transcribe, idle_seconds=settings.asr_idle_seconds)
 
     async def resolve(lecture):
@@ -80,7 +81,8 @@ def build(settings):
     from .reminders import Reminders
     async def discover_live(course):
         return await blocking(catalog.live, course)
-    service.reminders = Reminders(store, settings.root, discover_live)
+    service.reminders = Reminders(store, settings.root, discover_live,
+                                  attendance_courses=lambda: service.attendance.courses())
     async def resolve_attendance(lecture, protocol):
         return await blocking(catalog.sources, lecture, live_protocol=protocol)
     service.attendance = LiveAttendance(store, settings.root, resolve_attendance, MobileLogin(auth.session), reminders=service.reminders)

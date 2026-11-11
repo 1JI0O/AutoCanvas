@@ -317,10 +317,10 @@ class AttachmentTests(unittest.TestCase):
                                    {'id':2,'display_name':'b.pdf','url':'https://example.test/2'}]}
         with tempfile.TemporaryDirectory() as tmp:
             session=Session();folder=Path(tmp)/'output'
-            first=export(session,assignment,folder)
+            first=export(session,assignment,folder,download_attachments=True)
             self.assertEqual([a['status'] for a in first['attachments']],['succeeded','failed'])
             session.fail=False
-            second=export(session,assignment,folder)
+            second=export(session,assignment,folder,download_attachments=True)
             self.assertEqual([a['status'] for a in second['attachments']],['succeeded','succeeded'])
             self.assertEqual(session.calls.count('https://example.test/1'),1)
             self.assertFalse((Path(tmp)/'a.pdf').exists())

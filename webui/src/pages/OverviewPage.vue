@@ -54,11 +54,11 @@ const executionDetail = ref<any>(null);
             : !health.data.value.scheduler_running
               ? "调度未启动"
               : health.data.value.automation?.paused
-                ? "自动化已暂停"
-                : "自动化已启用"
+                ? "媒体与同步自动化已暂停"
+                : "媒体与同步自动化已启用"
       }}</span>
       <el-switch
-        aria-label="启用自动化"
+        aria-label="启用媒体与同步自动化（自动签到和提醒独立控制）"
         :model-value="
           Boolean(
             health.data.value?.scheduler_running &&

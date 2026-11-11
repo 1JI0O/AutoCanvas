@@ -139,11 +139,12 @@ def send_email(config, recipient, subject, text, message_id):
 
 
 class Reminders:
-    def __init__(self, store, root, discover, *, sender=send_email):
+    def __init__(self, store, root, discover, *, sender=send_email, attendance_courses=lambda: ()):
         self.store, self.root, self.discover, self.sender = store, root, discover, sender
         self.configuration = ReminderConfig(root)
         self.discovery = {}
         self.error = ''
+        self.attendance_courses = attendance_courses
 
     def courses(self):
         try:
@@ -228,11 +229,11 @@ class Reminders:
                 subject = f"[签到提醒] {row['course_name']}"
                 text = (f"在课程直播中识别到签到二维码。\n课程：{row['course_name']} ({row['course_id']})\n"
                         f"检测时间：{at}\n课次：{row['lecture_id']}\n"
-                        "本提醒只报告检测结果，没有执行扫码签到，请及时查看课堂并自行处理。\n"
+                        "本邮件只表示发现了签到码，不代表签到成功。是否提交及结果请查看 AutoCanvas 自动签到记录。\n"
                         "可在 AutoCanvas 的“签到提醒”页面查看截图和记录。")
                 if row.get('type') == 'test':
                     subject = f"[AutoCanvas 测试邮件] {row['course_name']}"
-                    text = f"这是签到提醒配置的测试邮件。\n课程：{row['course_name']}\n时间：{at}\n没有检测到签到事件，也没有执行扫码签到。"
+                    text = f"这是签到提醒配置的测试邮件。\n课程：{row['course_name']}\n时间：{at}\n本测试不会触发扫码签到，也不表示发现了签到事件。"
                 try:
                     await blocking(self.sender, smtp, row['recipient'], subject, text, row['message_id'])
                     row.update(status='sent', detail='SMTP 服务已接受；最终投递请以收件箱为准')
@@ -250,13 +251,18 @@ class Reminders:
 
     async def poll(self):
         while True:
-            for course in self.courses():
+            reminder_courses = set(self.courses())
+            signing_courses = set(self.attendance_courses())
+            wanted = reminder_courses | signing_courses
+            self.discovery = {key: row for key, row in self.discovery.items() if key in wanted}
+            for course in sorted(wanted):
+                purposes = (['auto_sign'] if course in signing_courses else []) + (['reminder'] if course in reminder_courses else [])
                 try:
                     rows = await self.discover(course)
                     self.discovery[course] = {'course_id': course, 'at': time.time(), 'status': 'ok',
-                                              'live_count': len(rows or [])}
+                                              'live_count': len(rows or []), 'purposes': purposes}
                 except Exception as error:
-                    self.discovery[course] = {'course_id': course, 'at': time.time(), 'status': type(error).__name__}
+                    self.discovery[course] = {'course_id': course, 'at': time.time(), 'status': type(error).__name__, 'purposes': purposes}
             try:
                 config, _ = self.configuration.read('courses')
                 delay = config['poll_seconds']

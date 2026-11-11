@@ -336,6 +336,15 @@ const states: Record<string, string> = {
       >
       <el-table-column prop="status" label="结果" />
       <el-table-column prop="live_count" label="直播课次数" />
+      <el-table-column label="用途" min-width="160"
+        ><template #default="{ row }">{{
+          (row.purposes || [])
+            .map((p: string) =>
+              p === "auto_sign" ? "自动扫码签到" : "邮件提醒",
+            )
+            .join("、")
+        }}</template></el-table-column
+      >
     </el-table>
     <p
       v-for="v in attendance.data.value?.views || []"

@@ -68,12 +68,10 @@ const names: Record<string, string> = {
   unknown: "结果不确定，请核对",
 };
 const enabled = computed(() => {
-  const config = attendance.data.value?.config;
   return (
-    config?.enabled &&
-    (!config.course_ids?.length ||
-      config.course_ids.includes(props.lecture.course_id)) &&
-    !attendance.data.value?.automation_paused
+    attendance.data.value?.enabled_course_ids?.includes(
+      props.lecture.course_id,
+    ) || false
   );
 });
 </script>
@@ -108,11 +106,7 @@ const enabled = computed(() => {
         >
       </div>
       <p class="attendance-note">
-        {{
-          enabled
-            ? "直播自动签到已启用。"
-            : "本课程直播自动签到未启用或已暂停。"
-        }}
+        {{ enabled ? "直播自动签到已启用。" : "本课程直播自动签到未启用。" }}
         二维码按签到记录计数，同一次签到不重复累计；关键词为识别线索，签到结果以接口记录为准。
       </p>
       <p v-if="loading && !total" class="attendance-note">

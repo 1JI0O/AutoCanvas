@@ -4,6 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { ElMessage, vLoading } from "element-plus";
 import { api } from "../api";
 import { date } from "../format";
+import { useApiQuery } from "../queries";
+
+const settings = useApiQuery("settings", "/api/settings", 5000);
 
 const cache = useQueryClient();
 const assignments = useQuery<any[]>({
@@ -87,6 +90,16 @@ function safeLink(url: string) {
 </script>
 
 <template>
+  <p class="muted">
+    {{
+      settings.data.value
+        ? settings.data.value.current.download_assignment_attachments
+          ? "附件下载已开启，刷新作业时会下载附件。"
+          : "附件下载已关闭，刷新作业仅同步正文与信息；已有文件保留。"
+        : "正在读取附件下载设置…"
+    }}
+    <RouterLink to="/settings">修改附件下载开关</RouterLink>
+  </p>
   <div class="simple-toolbar">
     <el-input
       v-model="search"

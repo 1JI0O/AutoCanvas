@@ -25,7 +25,7 @@ def attachments(assignment):
     return list(items.values())
 
 
-def export(session, assignment, folder: Path):
+def export(session, assignment, folder: Path, *, download_attachments=False):
     folder.mkdir(parents=True, exist_ok=True)
     text = html_to_text(assignment.get('description'))
     temporary = folder/'description.txt.tmp'
@@ -45,6 +45,10 @@ def export(session, assignment, folder: Path):
         path = folder/(re.sub(r'\W', '_', file_id)+'-'+name)
         if file_id in existing and path.exists():
             results.append(existing[file_id])
+            continue
+        allowed = download_attachments() if callable(download_attachments) else download_attachments
+        if not allowed:
+            results.append({'id': file_id, 'name': name, 'status': 'skipped', 'reason': 'attachment_download_disabled'})
             continue
         temp = path.with_suffix(path.suffix+'.part')
         try:

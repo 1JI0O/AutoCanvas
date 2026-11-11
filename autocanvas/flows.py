@@ -72,8 +72,9 @@ class CatalogSync:
 
 
 class AssignmentSync:
-    def __init__(self, canvas, session_factory, store, root):
+    def __init__(self, canvas, session_factory, store, root, *, download_attachments=False):
         self.canvas, self.session_factory, self.store, self.root = canvas, session_factory, store, root
+        self.download_attachments = download_attachments
 
     def run(self, course_id):
         from .assignments import export
@@ -81,7 +82,8 @@ class AssignmentSync:
         failed = False
         with self.session_factory() as session:
             for row in rows:
-                result = export(session, row, self.root/str(course_id)/str(row['id']))
+                result = export(session, row, self.root/str(course_id)/str(row['id']),
+                                download_attachments=self.download_attachments)
                 result['course_id'] = str(course_id)
                 self.store.put('assignments', f"{course_id}:{row['id']}", result)
                 failed |= any(a['status'] == 'failed' for a in result['attachments'])

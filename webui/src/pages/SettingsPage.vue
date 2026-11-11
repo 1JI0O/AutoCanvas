@@ -54,6 +54,7 @@ async function reloadSettings() {
 <template>
   <div class="settings-note">
     配置保存到当前运行目录。处理参数会等正在运行的任务结束后应用；监听地址、端口和数据目录需重启服务。修改数据目录不会迁移已有文件。
+    作业附件默认不下载，可在下方“作业”独立开启；关闭后保留已有文件，当前正在下载的单个附件可能完成，后续附件会跳过。
   </div>
   <el-alert
     v-if="config.data.value?.restart_required.length"
