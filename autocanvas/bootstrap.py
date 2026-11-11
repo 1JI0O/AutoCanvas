@@ -77,8 +77,12 @@ def build(settings):
     service.configuration = Configuration(settings, lambda: bool(service.active) or inference.busy or not inference.queue.empty(), apply_idle, apply_hot)
     from .attendance import MobileLogin
     from .live_attendance import LiveAttendance
+    from .reminders import Reminders
+    async def discover_live(course):
+        return await blocking(catalog.live, course)
+    service.reminders = Reminders(store, settings.root, discover_live)
     async def resolve_attendance(lecture, protocol):
         return await blocking(catalog.sources, lecture, live_protocol=protocol)
-    service.attendance = LiveAttendance(store, settings.root, resolve_attendance, MobileLogin(auth.session))
+    service.attendance = LiveAttendance(store, settings.root, resolve_attendance, MobileLogin(auth.session), reminders=service.reminders)
     service.browser_auth = BrowserAuth(auth)
     return service, inference

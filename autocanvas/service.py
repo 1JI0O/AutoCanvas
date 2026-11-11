@@ -63,6 +63,8 @@ class Service:
             self.background.append(asyncio.create_task(self._worker(kind), name=f'worker:{kind}'))
         if hasattr(self, 'attendance'):
             self.background.append(asyncio.create_task(self.attendance.run(), name='live-attendance'))
+        if hasattr(self, 'reminders'):
+            self.background.append(asyncio.create_task(self.reminders.run(), name='attendance-reminders'))
         if automation:
             self.background.append(asyncio.create_task(self._schedule(), name='automation'))
         if hasattr(self, 'browser_auth'):

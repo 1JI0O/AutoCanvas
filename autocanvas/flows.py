@@ -58,6 +58,18 @@ class CatalogSync:
             finally:
                 client.close()
 
+    def live(self, course_id):
+        """Refresh only the selected course's live listing, without replay or assignments."""
+        client = self.video_factory(course_id)
+        try:
+            teaching_class = client.context()
+            rows = client.lectures(course_id, teaching_class, 'live')
+            for row in rows:
+                self.store.put('lectures', lecture_key(course_id, 'live', row['id']), row)
+            return rows
+        finally:
+            client.close()
+
 
 class AssignmentSync:
     def __init__(self, canvas, session_factory, store, root):

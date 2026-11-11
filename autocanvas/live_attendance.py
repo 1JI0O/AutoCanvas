@@ -10,12 +10,13 @@ from .attendance import LatestAttendance
 
 
 class LiveAttendance:
-    def __init__(self, store, root, resolve, client, *, reader=media.live_frames, detector_factory=QRDetector):
+    def __init__(self, store, root, resolve, client, *, reader=media.live_frames, detector_factory=QRDetector, reminders=None):
         self.store, self.root, self.resolve = store, root, resolve
         self.reader, self.detector_factory = reader, detector_factory
         self.worker = LatestAttendance(client, store, self.enabled)
         self.tasks, self.views = {}, {}
         self.last_error = ''
+        self.reminders = reminders
 
     def config(self):
         return self.store.get('control', 'attendance', {'enabled': False, 'course_ids': []})
@@ -42,6 +43,9 @@ class LiveAttendance:
                 'records': sorted(self.store.list('attendance'), key=lambda r:r['at'], reverse=True)[:300],
                 'sample_seconds': .5, 'max_local_age_seconds': 2,
                 'automation_paused': self.store.get('control', 'automation', {}).get('paused', False)}
+
+    def watching(self, course):
+        return self.enabled(course) or bool(self.reminders and self.reminders.enabled(course))
 
     async def observe(self, lecture, source, index):
         key = f"{lecture['course_id']}:{lecture['id']}:{index}"
@@ -82,13 +86,19 @@ class LiveAttendance:
                     continue
                 image = ''
                 if rows:
-                    name = hashlib.sha256('\n'.join(r['content'] for r in rows).encode()).hexdigest()[:20]+'.jpg'
-                    target = folder/name
                     # Only persist evidence for recognized attendance links, not arbitrary QR contents.
                     from .attendance import parse_code
-                    if any(parse_code(r['content'], lecture['course_id']) for r in rows):
+                    for row in rows:
+                        code = parse_code(row['content'], lecture['course_id'])
+                        if not code:
+                            continue
+                        # Rotating tokens for the same rollcall need only one evidence image.
+                        name = hashlib.sha256(code['key'].encode()).hexdigest()[:20]+'.jpg'
+                        target = folder/name
                         if not target.exists():target.write_bytes(data)
                         image = str(target.relative_to(self.root))
+                        if self.reminders:
+                            self.reminders.record(code, lecture, image)
                 self.worker.offer(key, rows, lecture['course_id'], lecture['id'], received, image)
 
         tasks = [asyncio.create_task(capture()), asyncio.create_task(decode())]
@@ -141,7 +151,7 @@ class LiveAttendance:
                 wanted = {}
                 for lecture in self.store.list('lectures'):
                     try:
-                        if (lecture.get('kind') == 'live' and self.enabled(lecture['course_id'])
+                        if (lecture.get('kind') == 'live' and self.watching(lecture['course_id'])
                                 and datetime.fromisoformat(lecture['begin']).timestamp() <= now < datetime.fromisoformat(lecture['end']).timestamp()):
                             wanted[lecture['course_id']+':'+lecture['id']] = lecture
                     except (ValueError, KeyError):continue

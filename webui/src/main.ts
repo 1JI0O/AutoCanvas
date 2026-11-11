@@ -41,6 +41,10 @@ const router = createRouter({
     { path: "/local", redirect: "/files" },
     { path: "/files", component: () => import("./pages/FilesPage.vue") },
     { path: "/settings", component: () => import("./pages/SettingsPage.vue") },
+    {
+      path: "/reminders",
+      component: () => import("./pages/RemindersPage.vue"),
+    },
     { path: "/auth", component: () => import("./pages/AuthPage.vue") },
     { path: "/logs", component: () => import("./pages/LogsPage.vue") },
   ],

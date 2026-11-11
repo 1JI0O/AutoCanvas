@@ -21,6 +21,20 @@ def install(app, service):
             return web.json_response(service.attendance.configure(await request.json()))
         return web.json_response(service.attendance.status())
 
+    async def reminders(request):
+        config = service.reminders.configuration
+        if request.method == 'PATCH':
+            body = await request.json()
+            if set(body) != {'section', 'values', 'revision'} or body['section'] not in ('courses', 'smtp'):
+                raise ValueError('需要 section、values 和 revision')
+            config.save(body['section'], body['values'], body['revision'])
+        return web.json_response(service.reminders.status())
+
+    async def test_reminders(request):
+        body = await request.json()
+        service.reminders.test(str(body['course_id']))
+        return web.json_response({'queued': True}, status=202)
+
     async def classroom(request):
         from .classroom_events import classroom_events
         return web.json_response(await blocking(classroom_events, root))
@@ -221,6 +235,9 @@ def install(app, service):
     app.router.add_get('/api/classroom-events', classroom)
     app.router.add_get('/api/attendance', attendance)
     app.router.add_patch('/api/attendance', attendance)
+    app.router.add_get('/api/reminders', reminders)
+    app.router.add_patch('/api/reminders', reminders)
+    app.router.add_post('/api/reminders/test', test_reminders)
     app.router.add_get('/api/files', files)
     app.router.add_get('/api/file', file)
     app.router.add_get('/api/logs', logs)

@@ -22,6 +22,7 @@ const nav = [
   ["/files", "产物浏览", "folder"],
   ["/homework", "作业", "assignment"],
   ["/classroom-events", "点名与二维码", "qr"],
+  ["/reminders", "签到提醒", "mail"],
   ["/settings", "全部设置", "settings"],
   ["/auth", "登录与鉴权", "lock"],
   ["/logs", "服务日志", "logs"],
@@ -80,7 +81,7 @@ onUnmounted(() => {
       <div id="app-navigation" class="sidebar-navigation">
         <nav aria-label="工作空间">
           <RouterLink
-            v-for="item in nav.slice(0, 7)"
+            v-for="item in nav.slice(0, 8)"
             :key="item[0]"
             :to="item[0]"
           >
@@ -90,7 +91,7 @@ onUnmounted(() => {
         <div class="sidebar-bottom">
           <nav aria-label="服务与设置">
             <RouterLink
-              v-for="item in nav.slice(7)"
+              v-for="item in nav.slice(8)"
               :key="item[0]"
               :to="item[0]"
             >
