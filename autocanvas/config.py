@@ -15,6 +15,7 @@ class Settings:
     auto_asr: bool = True
     auto_slides: bool = True
     auto_live: bool = True
+    auto_assignments: bool = False
     download_assignment_attachments: bool = False
     course_interval: int = 604800
     sync_interval: int = 3600
@@ -33,7 +34,7 @@ class Settings:
     keyword_debounce: int = 30
 
     def validate(self):
-        for key in ('auto_asr', 'auto_slides', 'auto_live', 'download_assignment_attachments'):
+        for key in ('auto_asr', 'auto_slides', 'auto_live', 'auto_assignments', 'download_assignment_attachments'):
             if type(getattr(self, key)) is not bool:
                 raise ValueError(f'{key}: 必须为布尔值')
         for key in ('port', 'course_interval', 'sync_interval', 'assignment_interval', 'schedule_interval', 'live_lead_seconds', 'live_queue_chunks', 'keyword_debounce', 'asr_idle_seconds'):

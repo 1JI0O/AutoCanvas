@@ -83,6 +83,7 @@ class IndependentControlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await response.json())['enabled_course_ids'], ['98432'])
             config = await (await client.get('/api/settings')).json()
             self.assertFalse(config['current']['download_assignment_attachments'])
+            self.assertFalse(config['current']['auto_assignments'])
             for enabled in (True, False):
                 response = await client.patch('/api/settings', json={
                     'values': {'download_assignment_attachments': enabled}, 'revision': config['revision']})
@@ -91,6 +92,16 @@ class IndependentControlTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(config['current']['download_assignment_attachments'], enabled)
                 self.assertEqual(config['restart_required'], [])
             self.assertEqual(await (await client.get('/api/automation')).json(), {'paused': True})
+            for enabled in (True, False):
+                response = await client.patch('/api/settings', json={
+                    'values': {'auto_assignments': enabled}, 'revision': config['revision']})
+                self.assertEqual(response.status, 200)
+                config = await response.json()
+                self.assertEqual(config['current']['auto_assignments'], enabled)
+                self.assertFalse(config['current']['download_assignment_attachments'])
+                self.assertEqual(config['restart_required'], [])
+            self.assertFalse(Settings.load(root=self.root).auto_assignments)
+            self.assertTrue(self.store.get('control', 'automation')['paused'])
             self.assertTrue(self.service.attendance.enabled('98432'))
             self.assertFalse(self.store.executions())
         finally:

@@ -141,7 +141,28 @@ async function toggleSetting(key: string, value: string | number | boolean) {
     </div>
   </section>
   <section class="panel switch-panel">
-    <h2>作业附件</h2>
+    <h2>作业同步与附件</h2>
+    <div class="switch-row">
+      <div>
+        <h3>自动同步作业</h3>
+        <p>
+          默认关闭。开启且全局自动调度运行时，按作业同步间隔更新正文与信息；关闭后课程同步也不会附带同步作业，手动“立即刷新”仍可使用。
+        </p>
+        <p v-if="automation.data.value?.paused" class="paused-note">
+          全局自动调度已暂停，开启此项只保存设置，恢复全局调度后才会自动同步。
+        </p>
+        <RouterLink to="/homework">查看作业与手动刷新 →</RouterLink>
+      </div>
+      <el-switch
+        :model-value="!!settings.data.value?.current?.auto_assignments"
+        :disabled="busy || !settings.data.value || settings.isError.value"
+        :loading="busy"
+        aria-label="自动同步作业"
+        @change="
+          (v: string | number | boolean) => toggleSetting('auto_assignments', v)
+        "
+      />
+    </div>
     <div class="switch-row">
       <div>
         <h3>下载作业附件</h3>
@@ -170,7 +191,7 @@ async function toggleSetting(key: string, value: string | number | boolean) {
       <div>
         <h3>启用全局自动调度</h3>
         <p>
-          恢复后会自动同步已启用课程、视频列表和作业信息，并按下方设置安排媒体处理。附件是否下载由上方独立开关决定。
+          恢复后会自动同步已启用课程和视频列表，并按设置安排媒体处理。作业是否自动同步、附件是否下载由上方两个独立开关决定。
         </p>
         <p>
           暂停后停止派发新的自动任务，已开始的任务可能继续；自动扫码签到和邮件提醒保持各自状态。

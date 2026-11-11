@@ -9,6 +9,7 @@ auto_live = true
 course_interval = 604800
 sync_interval = 3600
 assignment_interval = 1800
+auto_assignments = false
 # Text and assignment metadata are synchronized even with attachment downloads off.
 download_assignment_attachments = false
 schedule_interval = 60

@@ -35,6 +35,8 @@ class Service:
         return self.store.enqueue('sync', course_id, force=True, options={'automatic': automatic})
 
     def request_assignments(self, course_id='*', *, automatic=False, due_only=False):
+        if automatic and not self.settings.auto_assignments:
+            return []
         if course_id != '*' and self.store.get('courses', course_id) is None:
             raise KeyError(course_id)
         courses = [c for c in self.store.list('courses')
@@ -160,7 +162,8 @@ class Service:
             except Exception as error:
                 failed.append(course['id'])
                 self.store.put('sync', course['id'], {'course_id': course['id'], 'at': time.time(), 'status': 'failed', 'error': type(error).__name__})
-            self.request_assignments(course['id'], automatic=automatic, due_only=automatic)
+            if self.settings.auto_assignments:
+                self.request_assignments(course['id'], automatic=automatic, due_only=automatic)
         if failed:
             raise RuntimeError('Video synchronization failed for some courses; see sync status')
 
@@ -171,6 +174,9 @@ class Service:
             if row['kind'] == 'sync':
                 await self._sync(row['course_id'], row['options'].get('automatic', False))
             elif row['kind'] == 'assignments':
+                if row['options'].get('automatic') and not self.settings.auto_assignments:
+                    self.store.defer(run_id, delay=0)
+                    return
                 artifact = await blocking(self.assignments.run, row['course_id'])
             elif row['kind'].startswith('local_'):
                 from .flows import transcribe_source, slides_source
@@ -225,7 +231,8 @@ class Service:
             if self.configuration:
                 self.configuration.apply_ready()
             paused = self.store.get('control', 'automation', {}).get('paused', False)
-            row = self.store.claim(kind, allow_automatic=not paused)
+            allow_automatic = not paused and (kind != 'assignments' or self.settings.auto_assignments)
+            row = self.store.claim(kind, allow_automatic=allow_automatic)
             if row is None:
                 await asyncio.sleep(0.5)
                 continue

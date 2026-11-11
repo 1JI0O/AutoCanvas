@@ -152,7 +152,7 @@ npm run dev
 
 ## 作业列表
 
-作业列表默认每 30 分钟从 Canvas 自动同步一次（`assignment_interval = 1800`）。WebUI「立即刷新」或 `POST /api/assignments/sync`（空请求同步全部启用课程，可选 `course_id`）可立即触发同步。自动化暂停时仍可手动刷新。
+作业自动同步默认关闭（`auto_assignments = false`），可在“开关管理”或“全部设置 → 作业”独立开启。开启且全局自动化运行时，每 30 分钟从 Canvas 自动同步一次（`assignment_interval = 1800`）。关闭后课程 / 视频列表同步也不会附带同步作业；已排队的自动作业同步等待重新开启，已开始的同步可能完成。WebUI「立即刷新」或 `POST /api/assignments/sync`（空请求同步全部启用课程，可选 `course_id`）仍可手动同步，不受此开关或全局暂停影响。
 
 作业附件默认不下载（`download_assignment_attachments = false`），手动刷新和自动同步都遵守此开关，仅保存正文和信息。可在左侧“开关管理”或“全部设置 → 作业”独立开启；关闭后保留已有附件，当前开始下载的单个附件可能完成，后续附件会跳过。
 

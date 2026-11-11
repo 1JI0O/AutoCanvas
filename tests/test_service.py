@@ -131,6 +131,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.execution(run)['status'],'pending')
 
     async def test_tick_idempotent_and_pause(self):
+        self.settings.auto_assignments = True
         self.store.put('sync','scheduled',{'at':time.time()})
         now=datetime.now(timezone.utc)
         self.store.put('lectures','1:live:4',{'id':'4','course_id':'1','kind':'live','begin':(now+timedelta(minutes=5)).isoformat(),'end':(now+timedelta(hours=1)).isoformat()})
@@ -165,8 +166,56 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
             await client.close()
 
 
+    async def test_disabled_assignments_skip_timer_and_catalog_sync_but_allow_manual(self):
+        from unittest.mock import patch
+        self.settings.auto_asr = self.settings.auto_slides = self.settings.auto_live = False
+        self.store.put('sync', 'scheduled', {'at': time.time()})
+        await self.service.tick()
+        self.assertFalse(self.store.executions())
+        self.service.catalog = SimpleNamespace(courses=Mock(), videos=Mock())
+        for automatic in (False, True):
+            await self.service._sync('1', automatic=automatic)
+        self.assertFalse(self.store.executions())
+        self.assertEqual(self.service.request_assignments(automatic=True), [])
+        self.assertIsNone(self.store.get('sync', 'assignments:1'))
+        ids = self.service.request_assignments('1')
+        self.assertEqual(len(ids), 1)
+        self.assertFalse(self.store.execution(ids[0])['options']['automatic'])
+
+    async def test_disabling_assignments_holds_queued_automatic_work_without_blocking_manual(self):
+        self.store.put('courses', '3', {'id': '3', 'active': True})
+        self.settings.auto_assignments = True
+        automatic = self.service.request_assignments('1', automatic=True)[0]
+        self.settings.auto_assignments = False
+        manual = self.service.request_assignments('3')[0]
+        calls = []
+        self.service.assignments = SimpleNamespace(run=lambda course: calls.append(course) or Path('artifact'))
+        worker = asyncio.create_task(self.service._worker('assignments'))
+        try:
+            await self.wait_status(manual, 'succeeded')
+            self.assertEqual(calls, ['3'])
+            self.assertEqual(self.store.execution(automatic)['status'], 'pending')
+            self.assertEqual(self.store.execution(automatic)['attempts'], 0)
+            self.settings.auto_assignments = True
+            await self.wait_status(automatic, 'succeeded')
+            self.assertEqual(calls, ['3', '1'])
+        finally:
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+
+    async def test_assignment_switch_rechecked_after_claim_before_execution(self):
+        self.settings.auto_assignments = True
+        run = self.service.request_assignments('1', automatic=True)[0]
+        row = self.store.claim('assignments')
+        self.settings.auto_assignments = False
+        self.service.assignments = SimpleNamespace(run=Mock())
+        await self.service._execute(row)
+        self.service.assignments.run.assert_not_called()
+        self.assertEqual(self.store.execution(run)['status'], 'pending')
+
     async def test_assignments_have_independent_half_hour_schedule(self):
         from unittest.mock import patch
+        self.settings.auto_assignments = True
         self.settings.auto_asr = self.settings.auto_slides = self.settings.auto_live = False
         self.store.put('sync', 'scheduled', {'at': 10000})
         self.store.put('courses','inactive',{'id':'inactive','active':False})

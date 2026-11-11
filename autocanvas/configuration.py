@@ -10,6 +10,7 @@ LABELS = {
     'auto_asr': ('自动转写回放', '自动化'), 'auto_slides': ('自动抽取 Slides', '自动化'), 'auto_live': ('自动监听直播', '自动化'),
     'course_interval': ('课表同步间隔 / 秒', '自动化'), 'sync_interval': ('视频同步间隔 / 秒', '自动化'),
     'assignment_interval': ('作业同步间隔 / 秒', '自动化'),
+    'auto_assignments': ('自动同步作业（手动刷新不受影响）', '作业'),
     'download_assignment_attachments': ('下载作业附件（关闭时仅同步正文与信息）', '作业'),
     'schedule_interval': ('调度检查间隔 / 秒', '自动化'), 'live_lead_seconds': ('直播提前启动 / 秒', '直播'),
     'live_queue_chunks': ('直播音频队列容量 / 块', '直播'), 'model': ('本地模型名称或路径', '转写'),

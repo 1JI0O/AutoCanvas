@@ -93,6 +93,16 @@ function safeLink(url: string) {
   <p class="muted">
     {{
       settings.data.value
+        ? settings.data.value.current.auto_assignments
+          ? "作业自动同步已开启，需全局自动调度运行才会定期更新。"
+          : "作业自动同步已关闭，仍可点击“立即刷新”手动更新。"
+        : "正在读取作业同步设置…"
+    }}
+    <RouterLink to="/switches">管理作业同步开关</RouterLink>
+  </p>
+  <p class="muted">
+    {{
+      settings.data.value
         ? settings.data.value.current.download_assignment_attachments
           ? "附件下载已开启，刷新作业时会下载附件。"
           : "附件下载已关闭，刷新作业仅同步正文与信息；已有文件保留。"
