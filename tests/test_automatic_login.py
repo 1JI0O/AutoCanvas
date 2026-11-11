@@ -73,6 +73,28 @@ class LoginSession(requests.Session):
 
 
 class FreshLoginTests(unittest.TestCase):
+    def setUp(self):
+        self.sleep = self.enterContext(patch('autocanvas.automatic_login.time.sleep'))
+
+    def test_fast_solver_waits_before_submitting_new_captcha(self):
+        session = LoginSession()
+        def settle(seconds):
+            self.assertFalse(session.submissions)
+            self.assertEqual(seconds, 1.75)
+        self.sleep.side_effect = settle
+        with patch('autocanvas._jaccount.create_session', return_value=session), patch('autocanvas.automatic_login.time.monotonic', side_effect=[100, 100.25]):
+            fresh_login('user', 'password', lambda image: 'abcd')
+        self.sleep.assert_called_once_with(1.75)
+        self.assertEqual(len(session.submissions), 1)
+        session.close()
+
+    def test_slow_solver_does_not_add_another_wait(self):
+        session = LoginSession()
+        with patch('autocanvas._jaccount.create_session', return_value=session), patch('autocanvas.automatic_login.time.monotonic', side_effect=[100, 103]):
+            fresh_login('user', 'password', lambda image: 'abcd')
+        self.sleep.assert_not_called()
+        session.close()
+
     def test_complete_oidc_callback_and_canvas_validation(self):
         session = LoginSession()
         solver = Mock(return_value='abcde')
@@ -88,10 +110,23 @@ class FreshLoginTests(unittest.TestCase):
 
     def test_captcha_error_refreshes_form_then_succeeds(self):
         session = LoginSession([{'errno': 1, 'error': '验证码错误'}, {'errno': 0, 'url': 'https://oc.sjtu.edu.cn/callback'}])
-        with patch('autocanvas._jaccount.create_session', return_value=session):
-            fresh_login('user', 'password', Mock(side_effect=['wrong', 'right']))
+        # Distinct images and answers must stay paired across a rejected captcha.
+        original_get = session.get
+        def get(url, **kwargs):
+            response = original_get(url, **kwargs)
+            if '/captcha' in url:
+                response.content = ('image-' + kwargs['params']['uuid']).encode()
+            return response
+        solver = Mock(side_effect=['wrong', 'right'])
+        pauses = []
+        self.sleep.side_effect = lambda seconds: pauses.append((seconds, len(session.submissions), session.pages))
+        with patch('autocanvas._jaccount.create_session', return_value=session), patch.object(session, 'get', side_effect=get):
+            fresh_login('user', 'password', solver)
         self.assertEqual(len(session.submissions), 2)
         self.assertNotEqual(session.submissions[0]['uuid'], session.submissions[1]['uuid'])
+        self.assertEqual([call.args[0] for call in solver.call_args_list], [b'image-uuid-2', b'image-uuid-4'])
+        self.assertEqual([item['captcha'] for item in session.submissions], ['wrong', 'right'])
+        self.assertIn((2.0, 1, 2), pauses)  # Back off before fetching the next form.
         session.close()
 
     def test_password_error_is_not_retried_even_with_errno_one(self):
@@ -117,6 +152,7 @@ class FreshLoginTests(unittest.TestCase):
         with patch('autocanvas._jaccount.create_session', return_value=session):
             fresh_login('user', 'password', solver)
         self.assertEqual(session.submissions[0]['captcha'], '')
+        self.sleep.assert_not_called()
         session.close()
         session = LoginSession([{'errno': 2, 'error': '需要短信验证'}])
         with patch('autocanvas._jaccount.create_session', return_value=session):
@@ -197,6 +233,19 @@ class StoredLoginTests(unittest.TestCase):
             self.assertEqual(self.manager.state()['next_attempt'], 1060)
         self.assertEqual(self.path.read_text(), 'old-session')
         self.assertNotIn('SECRET', self.manager.path.read_text())
+
+    def test_captcha_failure_details_are_retained_without_response_or_credentials(self):
+        failure = RemoteError('SECRET response body', stage='captcha_solver', code='attempts_exhausted')
+        with patch('autocanvas.automatic_login.fresh_login', side_effect=failure):
+            with self.assertRaises(AuthenticationRequired):
+                self.manager.login()
+        state = self.manager.state()
+        self.assertFalse(state['blocked'])
+        self.assertEqual(state['last_error_type'], 'RemoteError')
+        self.assertEqual(state['last_error_stage'], 'captcha_solver')
+        self.assertEqual(state['last_error_code'], 'attempts_exhausted')
+        self.assertNotIn('SECRET', self.manager.path.read_text())
+        self.assertNotIn('secret-password', self.manager.path.read_text())
 
     def test_bad_credentials_block_until_config_changes(self):
         with patch('autocanvas.automatic_login.fresh_login', side_effect=LoginRejected('credentials_rejected')) as login:

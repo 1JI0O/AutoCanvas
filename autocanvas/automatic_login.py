@@ -11,6 +11,8 @@ from .credentials import CredentialStore, CredentialStoreError
 from .types import AuthenticationRequired, RemoteError
 
 SOLVER_URL = 'https://geek.sjtu.edu.cn/captcha-solver/'
+CAPTCHA_SUBMIT_MIN_SECONDS = 2.0
+CAPTCHA_RETRY_SECONDS = 2.0
 
 
 class LoginRejected(AuthenticationRequired):
@@ -60,7 +62,13 @@ def fresh_login(username, password, solver=None):
                 image.raise_for_status()
                 if not image.headers.get('Content-Type', '').startswith('image/') or not 0 < len(image.content) <= 1024*1024:
                     raise RemoteError('验证码格式无效', stage='captcha_fetch', code='invalid_image')
+                # A very fast solver can submit before jAccount accepts the new
+                # challenge. Count solver time towards a short settling period.
+                ready_at = time.monotonic() + CAPTCHA_SUBMIT_MIN_SECONDS
                 captcha = solver(image.content)
+                remaining = ready_at - time.monotonic()
+                if remaining > 0:
+                    time.sleep(remaining)
             _, result = _jaccount._submit_login(session, params, uuid, username, password, captcha, url)
             if not isinstance(result, dict):
                 raise RemoteError('登录响应格式已变化', stage='login_submit', code='invalid_response')
@@ -71,6 +79,10 @@ def fresh_login(username, password, solver=None):
             # Do not infer captcha errors from errno=1: it may be a bad password.
             error = str(result.get('error', '')).lower()
             if has_captcha and ('验证码' in error or 'captcha' in error):
+                if attempt < 2:
+                    time.sleep(CAPTCHA_RETRY_SECONDS)
+                # The next iteration fetches a new form/UUID and image, then
+                # solves that image. Never resubmit the previous captcha.
                 continue
             if any(word in error for word in ('密码', 'password', '用户名', '账号', '账户')):
                 raise LoginRejected('credentials_rejected')
@@ -133,7 +145,8 @@ class AutomaticLogin:
             try:
                 _jaccount.save_session(session, self.session_file)
                 self._save({**state, 'blocked': False, 'failures': 0, 'next_attempt': 0,
-                            'last_success': time.time(), 'last_error': None})
+                            'last_success': time.time(), 'last_error': None,
+                            'last_error_type': None, 'last_error_stage': None, 'last_error_code': None})
             except BaseException:
                 session.close()
                 raise
@@ -143,6 +156,9 @@ class AutomaticLogin:
             blocked = isinstance(error, LoginRejected)
             code = error.reason if blocked else 'credentials_unavailable' if isinstance(error, CredentialStoreError) else 'temporary_login_failure'
             self._save({**state, 'blocked': blocked, 'failures': failures, 'last_error': code,
+                        'last_error_type': type(error).__name__,
+                        'last_error_stage': error.stage if isinstance(error, RemoteError) else None,
+                        'last_error_code': error.code if isinstance(error, RemoteError) else None,
                         'last_failure': time.time(), 'next_attempt': time.time() + (60, 300, 900, 3600)[min(failures-1, 3)]})
             # Park work until the auth maintenance loop succeeds; do not exhaust
             # each execution's short media retry budget during a login outage.
