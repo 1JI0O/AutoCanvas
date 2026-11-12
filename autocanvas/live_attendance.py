@@ -1,12 +1,15 @@
 """Live video observer; independent of audio inference, replay and HTTP UI."""
 import asyncio
 import hashlib
+import logging
 import time
 from datetime import datetime
 from . import media
 from .qr import QRDetector
 from .execution import blocking
 from .attendance import LatestAttendance
+
+log = logging.getLogger(__name__)
 
 
 class LiveAttendance:
@@ -63,6 +66,7 @@ class LiveAttendance:
         state = {'course_id': lecture['course_id'], 'lecture_id': lecture['id'], 'view': str(source.view),
                  'last_frame': None, 'last_decode': None, 'decode_ms': None, 'superseded': 0, 'status': 'connecting'}
         self.views[key] = state
+        log.info('Live QR observer started: course=%s lecture=%s view=%s', lecture['course_id'], lecture['id'], source.view)
         folder = self.root/'outputs'/lecture['course_id']/lecture['id']/'live'/'attendance'
         folder.mkdir(parents=True, exist_ok=True)
 
@@ -108,33 +112,46 @@ class LiveAttendance:
                             self.reminders.record(code, lecture, image)
                 self.worker.offer(key, rows, lecture['course_id'], lecture['id'], received, image)
 
-        tasks = [asyncio.create_task(capture()), asyncio.create_task(decode())]
         try:
-            await asyncio.gather(*tasks)
+            # A single owner cancels and joins both children. Repeated cancellation
+            # from nested gather/finally blocks used to interrupt reader cleanup.
+            async with asyncio.TaskGroup() as group:
+                group.create_task(capture())
+                group.create_task(decode())
         finally:
-            for task in tasks:task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
             self.worker.latest.pop(key, None)
             self.views.pop(key, None)
+            log.info('Live QR observer stopped: course=%s lecture=%s view=%s frames=%s last_frame=%s',
+                     lecture['course_id'], lecture['id'], source.view, sequence, state['last_frame'])
 
     async def lecture(self, lecture):
         protocol = 2  # Prefer HTTP-FLV; fall back to latest HLS segment on connection failure.
-        while True:
-            tasks = []
+        end = datetime.fromisoformat(lecture['end']).timestamp()
+        while time.time() < end:
             try:
-                sources = await self.resolve(lecture, protocol)
-                if not sources:raise ValueError('No live sources')
-                tasks = [asyncio.create_task(self.observe(lecture, s, i)) for i,s in enumerate(sources)]
-                await asyncio.gather(*tasks)
+                # End the stream even if the outer scheduler is busy with another
+                # course. The deadline also covers source resolution/reconnection.
+                async with asyncio.timeout(max(0, end-time.time())):
+                    sources = await self.resolve(lecture, protocol)
+                    if not sources:raise ValueError('No live sources')
+                    async with asyncio.TaskGroup() as group:
+                        for i, source in enumerate(sources):
+                            group.create_task(self.observe(lecture, source, i))
             except asyncio.CancelledError:
                 raise
+            except TimeoutError:
+                if time.time() >= end:
+                    return
+                self.last_error = '直播扫码连接超时，正在切换画面协议重连'
+                protocol = 3 if protocol == 2 else 2
             except Exception as error:
+                while isinstance(error, BaseExceptionGroup):
+                    error = error.exceptions[0]
                 self.last_error = '直播扫码连接或解码异常，正在切换画面协议重连：'+type(error).__name__
                 protocol = 3 if protocol == 2 else 2
-            finally:
-                for task in tasks:task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-            await asyncio.sleep(2)
+            remaining = end-time.time()
+            if remaining > 0:
+                await asyncio.sleep(min(2, remaining))
 
     async def run(self):
         dispatcher = asyncio.create_task(self.worker.run())
