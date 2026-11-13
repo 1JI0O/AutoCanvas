@@ -27,7 +27,7 @@ from autocanvas.video import Video
 
 class Boundaries(unittest.TestCase):
     def test_imports_are_lightweight(self):
-        code = "import autocanvas.auth, autocanvas.video, autocanvas.asr, autocanvas.mlx_asr, autocanvas.asr_worker; import sys; assert 'torch' not in sys.modules; assert 'mlx.core' not in sys.modules; assert 'cv2' not in sys.modules; assert 'autocanvas.storage' not in sys.modules"
+        code = "import autocanvas.auth, autocanvas.video, autocanvas.asr, autocanvas.mlx_asr, autocanvas.asr_worker, autocanvas.qr_worker; import sys; assert 'torch' not in sys.modules; assert 'mlx.core' not in sys.modules; assert 'cv2' not in sys.modules; assert 'autocanvas.storage' not in sys.modules"
         subprocess.run([sys.executable, '-c', code], check=True)
 
     def test_no_reverse_dependencies(self):

@@ -24,8 +24,10 @@ class LiveLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.cleaned = set()
         self.interrupted = set()
         class Detector:
-            def detect_bytes(self, data):
+            async def detect_bytes(self, data):
                 return []
+            async def close(self):
+                pass
         async def reader(source):
             try:
                 yield b'frame'
@@ -94,9 +96,6 @@ class LiveLifecycleTests(unittest.IsolatedAsyncioTestCase):
         subprocess.run(['ffmpeg', '-nostdin', '-y', '-hide_banner', '-loglevel', 'error',
                         '-f', 'lavfi', '-i', 'color=size=160x120:rate=10', '-t', '2',
                         '-c:v', 'libx264', '-preset', 'ultrafast', str(video)], check=True)
-        class Detector:
-            def detect_bytes(self, data):
-                return []
         async def resolve(*args):
             return [MediaSource(str(video), view=str(i)) for i in range(2)]
         processes = []
@@ -105,7 +104,7 @@ class LiveLifecycleTests(unittest.IsolatedAsyncioTestCase):
             process = await spawn(*args, **kwargs)
             processes.append(process)
             return process
-        observer = LiveAttendance(self.store, self.root, resolve, SimpleNamespace(), detector_factory=Detector)
+        observer = LiveAttendance(self.store, self.root, resolve, SimpleNamespace())
         lecture = {'course_id': '10001', 'id': 'lecture',
                    'end': (datetime.now(timezone.utc)+timedelta(seconds=30)).isoformat()}
         with patch.object(media, 'inputs', return_value=['-re', '-stream_loop', '-1']), \
@@ -113,11 +112,11 @@ class LiveLifecycleTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.create_task(observer.lecture(lecture))
             try:
                 async with asyncio.timeout(8):
-                    while len(observer.views) != 2 or not all(v['last_frame'] for v in observer.views.values()):
+                    while len(processes) != 4 or len(observer.views) != 2 or not all(v['last_frame'] for v in observer.views.values()):
                         await asyncio.sleep(.01)
                 task.cancel()
                 await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 8)
-                self.assertEqual(len(processes), 2)
+                self.assertEqual(len(processes), 4)  # Two ffmpeg and two isolated QR decoders.
                 self.assertTrue(all(p.returncode is not None for p in processes))
                 self.assertFalse(observer.views)
                 self.assertFalse(observer.worker.latest)

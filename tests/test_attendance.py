@@ -138,12 +138,15 @@ class AttendanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_observer_discards_decode_when_newer_frame_arrives(self):
         from autocanvas.live_attendance import LiveAttendance
         from autocanvas.types import MediaSource
-        from threading import Event
-        started=Event();release=Event()
+        started=asyncio.Event();release=asyncio.Event()
         class Detector:
-            def detect_bytes(self,data):
-                if data==b'old':started.set();release.wait(2)
+            async def detect_bytes(self,data):
+                if data==b'old':
+                    started.set()
+                    await release.wait()
                 return [{'content':url(data.decode())}]
+            async def close(self):
+                pass
         new_frame=asyncio.Event()
         async def reader(source):
             yield b'old'

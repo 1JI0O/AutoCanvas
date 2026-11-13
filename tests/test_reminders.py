@@ -57,9 +57,11 @@ class ReminderTests(unittest.IsolatedAsyncioTestCase):
         client = Mock()
         detected = asyncio.Event()
         class Detector:
-            def detect_bytes(self, data):
+            async def detect_bytes(self, data):
                 return [{'content': 'https://mlearning.sjtu.edu.cn/lms/mobile2/forscan/'
                          '?courseCode=10001&rollCallToken=FIRST&signHistoryId=event'}]
+            async def close(self):
+                pass
         async def reader(source):
             yield b'image'
             detected.set()

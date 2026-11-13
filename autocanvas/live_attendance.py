@@ -5,15 +5,14 @@ import logging
 import time
 from datetime import datetime
 from . import media
-from .qr import QRDetector
-from .execution import blocking
+from .qr_worker import ProcessQRDetector
 from .attendance import LatestAttendance
 
 log = logging.getLogger(__name__)
 
 
 class LiveAttendance:
-    def __init__(self, store, root, resolve, client, *, reader=media.live_frames, detector_factory=QRDetector, reminders=None):
+    def __init__(self, store, root, resolve, client, *, reader=media.live_frames, detector_factory=ProcessQRDetector, reminders=None):
         self.store, self.root, self.resolve = store, root, resolve
         self.reader, self.detector_factory = reader, detector_factory
         self.worker = LatestAttendance(client, store, self.enabled)
@@ -59,7 +58,6 @@ class LiveAttendance:
 
     async def observe(self, lecture, source, index):
         key = f"{lecture['course_id']}:{lecture['id']}:{index}"
-        detector = self.detector_factory()
         slot = None
         sequence = 0
         changed = asyncio.Event()
@@ -85,12 +83,19 @@ class LiveAttendance:
                 await reader.aclose()
 
         async def decode():
+            detector = self.detector_factory()
+            try:
+                await decode_frames(detector)
+            finally:
+                await detector.close()
+
+        async def decode_frames(detector):
             while True:
                 await changed.wait()
                 changed.clear()
                 seq, received, data = slot
                 start = time.monotonic()
-                rows = await blocking(detector.detect_bytes, data)
+                rows = await detector.detect_bytes(data)
                 state.update(last_decode=time.time(), decode_ms=round((time.monotonic()-start)*1000))
                 if seq != sequence:
                     state['superseded'] += 1
